@@ -1,0 +1,185 @@
+Step 1 cat all FULL_ORTHO files togther
+
+cat *targetsFULL_ORTHO.fasta > ALL_FULL_ORTHO.fa
+
+## FOR GEODE scripts, I had to do this to put all entries on their own line:
+sed -i -e 's/>/\n>/g' ALL_FULL_ORTHO.fa #add a break before the >
+sed -i -e '/^$/d' ALL_FULL_ORTHO.fa #remove blank lines
+
+Two ways to go here 
+A: get the best seq for everthing and then do contamination filter
+B: contamination filter everthing and then grab the best seq (just do it in opposite order of a start with blast and cleaning before you pick the best sequnce)
+
+not sure what is best A will be faster
+
+A:
+
+Step 2
+find the sequnce with the top bit score send to ALLT
+find the sequnce with the highest avg. kmer cov send to ALLC
+find the sequnce with the longest length send to ALL_L
+
+Join the top sequences from each category, count and sort and pick the top sequnce.
+The end top sequence has the the most categories with preference given to the top bit score and coverage when it does not top in all three categories
+
+
+if taxa name looks like this:
+
+  1      2     3      4     5        6    7     8   9   10
+L205_epuraea_oeidopa_comp1_126|NODE_114_length_248_cov_0.853801
+
+
+
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"|  sort -k5,5nr -t"_"| sort -u -k1,3 -t "_"| sort > ALLT
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"| sort -k10,10nr -t"_"| sort -u -k1,3 -t "_" | sort > ALLC
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"| sort -k8,8nr -t"_"| sort -u -k1,3 -t "_" | sort > ALL_L
+
+
+cat ALLT ALLC ALL_L| sort |uniq -c | gsed "s/^ \+//"| gsed "s/ /_/"| sort -k1,1rn -k6,6rn -k11,11nr -t"_"| sort -u -k2,4 -t"_" | cut -f2- -d "_"| sort > topseqs.list
+
+
+if taxa name looks like this:
+
+  1    2     3      4        5      6      7     8   9   10   11
+L205_IDNUM_epuraea_oeidopa_comp1_126|NODE_114_length_248_cov_0.853801
+
+
+
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"|  sort -k6,6nr -t"_"| sort -u -k1,3 -t "_"| sort > ALLT
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"| sort -k11,11nr -t"_"| sort -u -k1,3 -t "_" | sort > ALLC
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"| sort -k9,9nr -t"_"| sort -u -k1,3 -t "_" | sort > ALL_L
+
+
+# If on Mac, you need to use "gsed" instead of sed
+cat ALLT ALLC ALL_L| sort |uniq -c | sed "s/^ \+//"| sed "s/ /_/"| sort -k1,1rn -k7,7rn -k12,12nr -t"_"| sort -u -k2,4 -t"_" | cut -f2- -d "_"| sort > topseqs.list
+
+
+if taxa name looks like this:
+
+  1    2     3      4        5      6      7     8      9   10   11  12
+L205_IDNUM_family_epuraea_oeidopa_comp1_126|NODE_114_length_248_cov_0.853801
+
+  1. 2.        3.            4         5         6       7     8     9     10  11.    12
+L001_OD_Amphipterygidae_Amphipteryx_agrioides_comp21_349|NODE_158_length_3628_cov_2994.967896
+
+L418_EP_Acanthametropodidae_Analetris_eximia_comp1_144|NODE_12_length_6664_cov_23.782918
+ 1.  2         3               4         5      6     7      8    9    10.  11. 12:
+:q
+:q
+:q!
+:q!
+
+
+ 
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"|  sort -k7,7nr -t"_"| sort -u -k2,4 -t "_"| sort > ALLT
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"| sort -k12,12nr -t"_"| sort -u -k1,3 -t "_" | sort > ALLC
+grep ">" ALL_FULL_ORTHO.fa | sed "s/>//"| sort -k10,10nr -t"_"| sort -u -k1,3 -t "_" | sort > ALL_L
+
+
+cat ALLT ALLC ALL_L| sort |uniq -c | sed "s/^ \+//"| sed "s/ /_/"| sort -k1,1rn -k8,8rn -k13,13nr -t"_"| sort -u -k2,4 -t"_" | cut -f2- -d "_"| sort > topseqs.list
+
+
+Step 3
+
+get the top seqs
+./getlist.py ALL_FULL_ORTHO.fa topseqs.list ALL_TOP_FULL_ORTHO.fa
+
+step 4 
+split into loci.... input file might have to be single line fasta file
+perl singleline.pl ALL_TOP_FULL_ORTHO.fa > sinALL_TOP_FULL_ORTHO.fa
+mv sinALL_TOP_FULL_ORTHO.fa ALL_TOP_FULL_ORTHO.fa
+
+./split.py ALL_TOP_FULL_ORTHO.fa _
+
+Step 5
+blast
+make a list of all the loci
+ls L*fa > INLIST
+
+run blast fo each loci file (modify the slurm file so that the number of tasks equals the number of loci in locus_list, you can get this with wc -l INLIST, make sure usearch is in your directory)
+SELFBLAST_array.slurm
+
+Step 6
+contamination filter save one of the two seqs if it has X time more avg kmer cov.
+
+cat all the blast results together in one file
+
+cat *.blast > All_blast.txt
+
+
+if taxa name looks like this:
+
+loci IDNUM Family genus species .........
+ 0    1     2      3        4      5      7     8      9   10   11  12
+L205_IDNUM_family_epuraea_oeidopa_comp1_126|NODE_114_length_248_cov_0.853801
+
+contamination at family save seq if 5 times more avg kmer cov:
+
+contamination_filter.py All_blast.txt _ 2 family 5
+
+contamination at family save seq if 5 times more avg kmer cov:
+contamination at family All_blast.txt _ 3 Genus 5
+
+you can just remove the family ones or the genus ones or even add a species check
+but i tend to delete crap from family and genus
+
+cat All_blast_genus_del_list.txt All_blast_Family_del_list.txt | sort -u > Contamination_del_list.txt
+
+removelist.py ALL_TOP_FULL_ORTHO.fa Contamination_del_list.txt  FINAL_CLEAN.fa
+
+
+step 7
+at this point if you want to add the reference species or other taxa from the probe design i would add them here.
+
+cat ALL_NIT_REF.fa FINAL_CLEAN.fa > FINAL_CLEAN_wREF.fa
+
+could try the counting monster script here to get numbers it might work if not i can get it to work pretty quik
+
+counting_monster.py FINAL_CLEAN_wREF.fa _
+
+
+ Step 8
+ split into loci.... input file might have to be single line fasta file
+
+./split.py FINAL_CLEAN_wREF.fa _
+
+if you used counting monster toss out Loci that does not have very many taxa before alignment
+
+Step 9
+
+
+then align them with mafft make sure you use opposite direction check
+these will be full length alignments would be messy could use the clean and trim script i have let me know and i can pass it on 
+
+for i in *.fas; do linsi --adjustdirectionaccurately --thread 8 $i > $i.aln; done
+
+
+could go to the probe region only  i think this work (have to use gsed on mac)
+
+grep ">" FINAL_CLEAN.fa | sed "s/>//"| sed "s/|.\+//" > FINAL_CLEAN_probename.list
+
+
+cat *targets_ORTHO.fasta > ALL_probe_ORTHO.fa
+
+getlist.py ALL_probe_ORTHO.fa FINAL_CLEAN_probename.list FINAL_CLEANprobe.fa
+
+add ref loci if want
+
+cat ALL_NIT_REF.fa FINAL_CLEAN_probe.fa > FINAL_CLEANprobe_wREF.fa
+
+split into loci.... input file might have to be single line fasta file
+
+./split.py FINAL_CLEANprobe_wREF.fa _
+
+then align them with mafft make sure you use opposite direction check
+ 
+for i in *.fas; do linsi --adjustdirectionaccurately --thread 8 $i > $i.aln; done
+ 
+ 
+
+to make concatenated file you got to clean the taxa name 
+
+got to get ride of the loci at the front and the _comp**** at the end i can help with some quick sed commands if you want (PBF: I wrote a script called "adjust_headers.py" that will do this)
+
+
+
